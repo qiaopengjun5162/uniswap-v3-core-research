@@ -22,20 +22,21 @@ repos:
         name: forge fmt
         description: Format files with solidity fmt.
         entry: bash -c 'forge fmt'
-        language: rust
+        language: system # 改为 system
+        types: [solidity] # 指定文件类型
         files: \.sol$
         args: []
       - id: typos
         name: typos
         description: check typo
         entry: bash -c 'typos'
-        language: rust
+        language: system
         files: \.*$
         pass_filenames: false
       - id: forge-test
         name: test test
         description: unit test for the project
         entry: bash -c 'forge test -vvv'
-        language: rust
+        language: system
         files: \.sol$
         pass_filenames: false
