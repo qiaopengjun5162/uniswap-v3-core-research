@@ -5,14 +5,14 @@ import {IUniswapV3Pool} from "./interfaces/IUniswapV3Pool.sol";
 
 import {NoDelegateCall} from "./NoDelegateCall.sol";
 
-import {LowGasSafeMath} from "./libraries/LowGasSafeMath.sol";
+// import {LowGasSafeMath} from "./libraries/LowGasSafeMath.sol";
 import {SafeCast} from "./libraries/SafeCast.sol";
 import {Tick} from "./libraries/Tick.sol";
 import {TickBitmap} from "./libraries/TickBitmap.sol";
 import {Position} from "./libraries/Position.sol";
 import {Oracle} from "./libraries/Oracle.sol";
 
-import {FullMath} from "./libraries/FullMath.sol";
+// import {FullMath} from "./libraries/FullMath.sol";
 import {FixedPoint128} from "./libraries/FixedPoint128.sol";
 import {TransferHelper} from "./libraries/TransferHelper.sol";
 import {TickMath} from "./libraries/TickMath.sol";
@@ -33,8 +33,8 @@ import {IUniswapV3PoolState} from "./interfaces/pool/IUniswapV3PoolState.sol";
 import {IUniswapV3PoolImmutables} from "./interfaces/pool/IUniswapV3PoolImmutables.sol";
 
 contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
-    using LowGasSafeMath for uint256;
-    using LowGasSafeMath for int256;
+    // using LowGasSafeMath for uint256;
+    // using LowGasSafeMath for int256;
     using SafeCast for uint256;
     using SafeCast for int256;
     using Tick for mapping(int24 => Tick.Info);
@@ -62,7 +62,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
     uint128 public immutable override maxLiquidityPerTick;
 
     struct Slot0 {
-        // the current price
+        // the current price sqrt(price)  根号下P 为了省gas  乘以2^96
         uint160 sqrtPriceX96;
         // the current tick
         int24 tick;
@@ -456,10 +456,12 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         if (amount1 > 0) balance1Before = balance1();
         IUniswapV3MintCallback(msg.sender).uniswapV3MintCallback(amount0, amount1, data);
         if (amount0 > 0) {
-            require(balance0Before.add(amount0) <= balance0(), "Insufficient token0 balance after transfer");
+            // require(balance0Before.add(amount0) <= balance0(), "Insufficient token0 balance after transfer");
+            require(balance0Before + amount0 <= balance0(), "Insufficient token0 balance after transfer");
         }
         if (amount1 > 0) {
-            require(balance1Before.add(amount1) <= balance1(), "Insufficient token1 balance after transfer");
+            // require(balance1Before.add(amount1) <= balance1(), "Insufficient token1 balance after transfer");
+            require(balance1Before + amount1 <= balance1(), "Insufficient token1 balance after transfer");
         }
 
         emit Mint(msg.sender, recipient, tickLower, tickUpper, amount, amount0, amount1);
@@ -569,7 +571,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         uint256 feeAmount;
     }
 
-    /// @inheritdoc IUniswapV3PoolActions
+    error InvalidAmountSpecified();
+
     function swap(
         address recipient,
         bool zeroForOne,
@@ -577,7 +580,7 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         uint160 sqrtPriceLimitX96,
         bytes calldata data
     ) external override noDelegateCall returns (int256 amount0, int256 amount1) {
-        require(amountSpecified != 0, "Amount specified must be non-zero");
+        if (amountSpecified == 0) revert InvalidAmountSpecified();
 
         Slot0 memory slot0Start = slot0;
         if (!slot0Start.unlocked) revert Locked();
@@ -644,10 +647,12 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
 
             if (exactInput) {
                 state.amountSpecifiedRemaining -= (step.amountIn + step.feeAmount).toInt256();
-                state.amountCalculated = state.amountCalculated.sub(step.amountOut.toInt256());
+                // state.amountCalculated = state.amountCalculated.sub(step.amountOut.toInt256());
+                state.amountCalculated = state.amountCalculated - step.amountOut.toInt256();
             } else {
                 state.amountSpecifiedRemaining += step.amountOut.toInt256();
-                state.amountCalculated = state.amountCalculated.add((step.amountIn + step.feeAmount).toInt256());
+                // state.amountCalculated = state.amountCalculated.add((step.amountIn + step.feeAmount).toInt256());
+                state.amountCalculated = state.amountCalculated + (step.amountIn + step.feeAmount).toInt256();
             }
 
             // if the protocol fee is on, calculate how much is owed, decrement feeAmount, and increment protocolFee
@@ -659,7 +664,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
 
             // update global fee tracker
             if (state.liquidity > 0) {
-                state.feeGrowthGlobalX128 += FullMath.mulDiv(step.feeAmount, FixedPoint128.Q128, state.liquidity);
+                // state.feeGrowthGlobalX128 += FullMath.mulDiv(step.feeAmount, FixedPoint128.Q128, state.liquidity);
+                state.feeGrowthGlobalX128 += (step.feeAmount * FixedPoint128.Q128) / state.liquidity;
             }
 
             // shift tick if we reached the next price
@@ -745,7 +751,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
 
             uint256 balance0Before = balance0();
             IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1, data);
-            require(balance0Before.add(uint256(amount0)) <= balance0(), "IIA");
+            // require(balance0Before.add(uint256(amount0)) <= balance0(), "IIA");
+            require(balance0Before + uint256(amount0) <= balance0(), "IIA");
         } else {
             if (amount0 < 0) {
                 TransferHelper.safeTransfer(token0, recipient, uint256(-amount0));
@@ -753,7 +760,8 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
 
             uint256 balance1Before = balance1();
             IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1, data);
-            require(balance1Before.add(uint256(amount1)) <= balance1(), "IIA");
+            // require(balance1Before.add(uint256(amount1)) <= balance1(), "IIA");
+            require(balance1Before + uint256(amount1) <= balance1(), "IIA");
         }
 
         emit Swap(msg.sender, recipient, amount0, amount1, state.sqrtPriceX96, state.liquidity, state.tick);
@@ -770,8 +778,10 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         uint128 _liquidity = liquidity;
         require(_liquidity > 0, "Liquidity must be greater than zero");
 
-        uint256 fee0 = FullMath.mulDivRoundingUp(amount0, fee, 1e6);
-        uint256 fee1 = FullMath.mulDivRoundingUp(amount1, fee, 1e6);
+        // uint256 fee0 = FullMath.mulDivRoundingUp(amount0, fee, 1e6);
+        // uint256 fee1 = FullMath.mulDivRoundingUp(amount1, fee, 1e6);
+        uint256 fee0 = (amount0 * fee + 999999) / 1e6;
+        uint256 fee1 = (amount1 * fee + 999999) / 1e6;
         uint256 balance0Before = balance0();
         uint256 balance1Before = balance1();
 
@@ -787,8 +797,10 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
         uint256 balance0After = balance0();
         uint256 balance1After = balance1();
 
-        require(balance0Before.add(fee0) <= balance0After, "Insufficient token0 balance for fee collection");
-        require(balance1Before.add(fee1) <= balance1After, "Insufficient token1 balance for fee collection");
+        // require(balance0Before.add(fee0) <= balance0After, "Insufficient token0 balance for fee collection");
+        require(balance0Before + fee0 <= balance0After, "Insufficient token0 balance for fee collection");
+        // require(balance1Before.add(fee1) <= balance1After, "Insufficient token1 balance for fee collection");
+        require(balance1Before + fee1 <= balance1After, "Insufficient token1 balance for fee collection");
 
         // sub is safe because we know balanceAfter is gt balanceBefore by at least fee
         uint256 paid0 = balance0After - balance0Before;
@@ -798,13 +810,17 @@ contract UniswapV3Pool is IUniswapV3Pool, NoDelegateCall {
             uint8 feeProtocol0 = slot0.feeProtocol % 16;
             uint256 fees0 = feeProtocol0 == 0 ? 0 : paid0 / feeProtocol0;
             if (uint128(fees0) > 0) protocolFees.token0 += uint128(fees0);
-            feeGrowthGlobal0X128 += FullMath.mulDiv(paid0 - fees0, FixedPoint128.Q128, _liquidity);
+            // feeGrowthGlobal0X128 += FullMath.mulDiv(paid0 - fees0, FixedPoint128.Q128, _liquidity);
+            uint256 feeAmount = paid0 - fees0;
+            feeGrowthGlobal0X128 += (feeAmount * FixedPoint128.Q128) / _liquidity;
         }
         if (paid1 > 0) {
             uint8 feeProtocol1 = slot0.feeProtocol >> 4;
             uint256 fees1 = feeProtocol1 == 0 ? 0 : paid1 / feeProtocol1;
             if (uint128(fees1) > 0) protocolFees.token1 += uint128(fees1);
-            feeGrowthGlobal1X128 += FullMath.mulDiv(paid1 - fees1, FixedPoint128.Q128, _liquidity);
+            // feeGrowthGlobal1X128 += FullMath.mulDiv(paid1 - fees1, FixedPoint128.Q128, _liquidity);
+            uint256 feeAmount = paid1 - fees1;
+            feeGrowthGlobal1X128 += (feeAmount * FixedPoint128.Q128) / _liquidity;
         }
 
         emit Flash(msg.sender, recipient, amount0, amount1, paid0, paid1);

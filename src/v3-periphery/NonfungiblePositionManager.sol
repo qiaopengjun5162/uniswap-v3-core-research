@@ -8,14 +8,16 @@ import {FullMath} from "../v3-core/libraries/FullMath.sol";
 import {INonfungiblePositionManager} from "./interfaces/INonfungiblePositionManager.sol";
 import {INonfungibleTokenPositionDescriptor} from "./interfaces/INonfungibleTokenPositionDescriptor.sol";
 import {PositionKey} from "./libraries/PositionKey.sol";
-import "./libraries/PoolAddress.sol";
-import "./base/LiquidityManagement.sol";
-import "./base/PeripheryImmutableState.sol";
-import "./base/Multicall.sol";
-import "./base/ERC721Permit.sol";
-import "./base/PeripheryValidation.sol";
-import "./base/SelfPermit.sol";
-import "./base/PoolInitializer.sol";
+import {PoolAddress} from "./libraries/PoolAddress.sol";
+import {LiquidityManagement} from "./base/LiquidityManagement.sol";
+import {PeripheryImmutableState} from "./base/PeripheryImmutableState.sol";
+import {Multicall} from "./base/Multicall.sol";
+import {ERC721Permit} from "./base/ERC721Permit.sol";
+import {PeripheryValidation} from "./base/PeripheryValidation.sol";
+import {SelfPermit} from "./base/SelfPermit.sol";
+import {PoolInitializer} from "./base/PoolInitializer.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 /// @title NFT positions
 /// @notice Wraps Uniswap V3 positions in the ERC721 non-fungible token interface
@@ -65,7 +67,7 @@ contract NonfungiblePositionManager is
     uint80 private _nextPoolId = 1;
 
     /// @dev The address of the token descriptor contract, which handles generating token URIs for position tokens
-    address private immutable _tokenDescriptor;
+    address private immutable TOKEN_DESCRIPTOR;
 
     // 添加用于枚举的存储变量
     uint256 private _totalSupply;
@@ -78,7 +80,7 @@ contract NonfungiblePositionManager is
         ERC721Permit("Uniswap V3 Positions NFT-V1", "UNI-V3-POS", "1")
         PeripheryImmutableState(_factory, _WETH9)
     {
-        _tokenDescriptor = _tokenDescriptor_;
+        TOKEN_DESCRIPTOR = _tokenDescriptor_;
     }
 
     // 实现 totalSupply
@@ -205,7 +207,7 @@ contract NonfungiblePositionManager is
     function tokenURI(uint256 tokenId) public view override(ERC721, IERC721Metadata) returns (string memory) {
         require(_ownerOf(tokenId) != address(0), "Token does not exist");
 
-        return INonfungibleTokenPositionDescriptor(_tokenDescriptor).tokenURI(this, tokenId);
+        return INonfungibleTokenPositionDescriptor(TOKEN_DESCRIPTOR).tokenURI(this, tokenId);
     }
 
     // save bytecode by removing implementation of unused method
